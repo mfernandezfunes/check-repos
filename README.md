@@ -74,6 +74,9 @@ CLEAR_CACHE=false # Set to true to force re-analysis of all repositories
 
 # Results Accumulation (Optional)
 ACCUMULATE_RESULTS=false # Set to true to accumulate all results in docker-images-all.txt
+
+# Cache Kilonova Checked (Optional)
+ADD_CACHE_KILONOVA_CHECKED=false # Set to true to cache repositories without kilonova.yaml
 ```
 
 #### How to get a GitHub Token
@@ -114,6 +117,9 @@ CLEAR_CACHE=true go run main.go
 
 # Accumulate all results in a single file
 ACCUMULATE_RESULTS=true go run main.go
+
+# Cache repositories without kilonova.yaml
+ADD_CACHE_KILONOVA_CHECKED=true go run main.go
 
 ## Output
 

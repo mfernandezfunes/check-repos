@@ -413,7 +413,7 @@ func TestAnalyzeRepositories(t *testing.T) {
 		errors: map[string]error{},
 	}
 
-	result := analyzeRepositories(mock, "test-org", repos, make(map[string]bool), "test-output.txt", false, ".")
+	result := analyzeRepositories(mock, "test-org", repos, make(map[string]bool), "test-output.txt", false, ".", false)
 
 	if result.Organization != "test-org" {
 		t.Errorf("Expected organization 'test-org', got '%s'", result.Organization)

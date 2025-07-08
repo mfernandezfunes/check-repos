@@ -20,16 +20,17 @@ import (
 
 // Config holds the application configuration
 type Config struct {
-	GitHubToken       string
-	Organization      string
-	OutputFile        string
-	Limit             int
-	Offset            int
-	DelayMs           int    // Delay between API calls in milliseconds
-	MaxRetries        int    // Maximum number of retries for failed requests
-	ClearCache        bool   // Whether to clear the cache before starting
-	OutputPath        string // Directory to store all output .txt files
-	AccumulateResults bool   // Whether to accumulate all results in a single file
+	GitHubToken             string
+	Organization            string
+	OutputFile              string
+	Limit                   int
+	Offset                  int
+	DelayMs                 int    // Delay between API calls in milliseconds
+	MaxRetries              int    // Maximum number of retries for failed requests
+	ClearCache              bool   // Whether to clear the cache before starting
+	OutputPath              string // Directory to store all output .txt files
+	AccumulateResults       bool   // Whether to accumulate all results in a single file
+	AddCacheKilonovaChecked bool   // Whether to cache repositories without kilonova.yaml
 }
 
 // Repository represents a GitHub repository
@@ -317,7 +318,7 @@ func main() {
 	}
 
 	// Analyze repositories
-	result := analyzeRepositories(gh, config.Organization, repos, analyzedRepos, config.OutputFile, config.AccumulateResults, config.OutputPath)
+	result := analyzeRepositories(gh, config.Organization, repos, analyzedRepos, config.OutputFile, config.AccumulateResults, config.OutputPath, config.AddCacheKilonovaChecked)
 
 	// Results are saved immediately during analysis, no need to save again
 
@@ -418,19 +419,29 @@ func loadConfig() (Config, error) {
 		}
 	}
 
+	// Parse add cache kilonova checked option
+	addCacheKilonovaCheckedStr := os.Getenv("ADD_CACHE_KILONOVA_CHECKED")
+	addCacheKilonovaChecked := false
+	if addCacheKilonovaCheckedStr != "" {
+		if parsedAddCacheKilonovaChecked, err := strconv.ParseBool(addCacheKilonovaCheckedStr); err == nil {
+			addCacheKilonovaChecked = parsedAddCacheKilonovaChecked
+		}
+	}
+
 	cacheFileName = filepath.Join(outputPath, "analyzed-repos.txt")
 
 	return Config{
-		GitHubToken:       token,
-		Organization:      org,
-		OutputFile:        filepath.Join(outputPath, outputFile),
-		Limit:             limit,
-		Offset:            offset,
-		DelayMs:           delayMs,
-		MaxRetries:        maxRetries,
-		ClearCache:        clearCache,
-		OutputPath:        outputPath,
-		AccumulateResults: accumulateResults,
+		GitHubToken:             token,
+		Organization:            org,
+		OutputFile:              filepath.Join(outputPath, outputFile),
+		Limit:                   limit,
+		Offset:                  offset,
+		DelayMs:                 delayMs,
+		MaxRetries:              maxRetries,
+		ClearCache:              clearCache,
+		OutputPath:              outputPath,
+		AccumulateResults:       accumulateResults,
+		AddCacheKilonovaChecked: addCacheKilonovaChecked,
 	}, nil
 }
 
@@ -490,7 +501,7 @@ func getRepositories(client GitHubClient, org string, limit, offset int) ([]Repo
 	return repos, nil
 }
 
-func analyzeRepositories(client GitHubClient, org string, repos []Repository, analyzedRepos map[string]bool, outputFile string, accumulateResults bool, outputPath string) Result {
+func analyzeRepositories(client GitHubClient, org string, repos []Repository, analyzedRepos map[string]bool, outputFile string, accumulateResults bool, outputPath string, addCacheKilonovaChecked bool) Result {
 	result := Result{
 		Organization: org,
 		TotalRepos:   len(repos),
@@ -512,6 +523,12 @@ func analyzeRepositories(client GitHubClient, org string, repos []Repository, an
 		if err != nil {
 			if err.Error() == "skipped - no kilonova.yaml" {
 				fmt.Printf("Skipping repository %s due to missing kilonova.yaml\n", repo.Name)
+				// Cache repositories without kilonova.yaml if addCacheKilonovaChecked is enabled
+				if addCacheKilonovaChecked {
+					if err := saveAnalyzedRepos(repo.FullName); err != nil {
+						fmt.Printf("Warning: Could not save repository without kilonova.yaml to cache: %v\n", err)
+					}
+				}
 				continue
 			}
 			fmt.Printf("Error analyzing repository %s: %v\n", repo.Name, err)
