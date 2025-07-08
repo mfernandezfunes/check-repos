@@ -71,6 +71,9 @@ MAX_RETRIES=5    # Maximum number of retries for failed API calls
 
 # Cache Management (Optional)
 CLEAR_CACHE=false # Set to true to force re-analysis of all repositories
+
+# Results Accumulation (Optional)
+ACCUMULATE_RESULTS=false # Set to true to accumulate all results in docker-images-all.txt
 ```
 
 #### How to get a GitHub Token
@@ -86,6 +89,8 @@ go run main.go
 ```
 
 All output files (`docker-images-*.txt`, `analyzed-repos.txt`, `unique-images.txt`) will be saved in the directory specified by `OUTPUT_PATH` (default: `./output`).
+
+When `ACCUMULATE_RESULTS=true`, all results will be saved to `docker-images-all.txt` instead of the offset/limit specific file.
 
 ### Pagination
 
@@ -106,6 +111,9 @@ LIMIT=50 OFFSET=200 go run main.go
 
 # Force re-analysis of all repositories (clear cache)
 CLEAR_CACHE=true go run main.go
+
+# Accumulate all results in a single file
+ACCUMULATE_RESULTS=true go run main.go
 
 ## Output
 
@@ -129,6 +137,7 @@ All output files will be located in the directory specified by `OUTPUT_PATH`.
 - `env.example`: Example environment configuration
 - `output/`: Default directory for all output files (can be changed with `OUTPUT_PATH`)
 - `output/analyzed-repos.txt`: Cache file with already analyzed repositories (auto-generated)
+- `output/docker-images-all.txt`: Unified results file (when `ACCUMULATE_RESULTS=true`)
 
 ## Functionality Details
 

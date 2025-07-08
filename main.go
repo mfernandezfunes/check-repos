@@ -20,15 +20,16 @@ import (
 
 // Config holds the application configuration
 type Config struct {
-	GitHubToken  string
-	Organization string
-	OutputFile   string
-	Limit        int
-	Offset       int
-	DelayMs      int    // Delay between API calls in milliseconds
-	MaxRetries   int    // Maximum number of retries for failed requests
-	ClearCache   bool   // Whether to clear the cache before starting
-	OutputPath   string // Directory to store all output .txt files
+	GitHubToken       string
+	Organization      string
+	OutputFile        string
+	Limit             int
+	Offset            int
+	DelayMs           int    // Delay between API calls in milliseconds
+	MaxRetries        int    // Maximum number of retries for failed requests
+	ClearCache        bool   // Whether to clear the cache before starting
+	OutputPath        string // Directory to store all output .txt files
+	AccumulateResults bool   // Whether to accumulate all results in a single file
 }
 
 // Repository represents a GitHub repository
@@ -316,7 +317,7 @@ func main() {
 	}
 
 	// Analyze repositories
-	result := analyzeRepositories(gh, config.Organization, repos, analyzedRepos, config.OutputFile)
+	result := analyzeRepositories(gh, config.Organization, repos, analyzedRepos, config.OutputFile, config.AccumulateResults, config.OutputPath)
 
 	// Results are saved immediately during analysis, no need to save again
 
@@ -328,7 +329,11 @@ func main() {
 
 	fmt.Printf("Analysis complete. Found %d Docker images across %d repositories\n",
 		len(result.Images), result.ReposWithDocker)
-	fmt.Printf("Results saved to: %s\n", config.OutputFile)
+	if config.AccumulateResults {
+		fmt.Printf("Results saved to: %s\n", filepath.Join(config.OutputPath, "docker-images-all.txt"))
+	} else {
+		fmt.Printf("Results saved to: %s\n", config.OutputFile)
+	}
 }
 
 func loadConfig() (Config, error) {
@@ -404,18 +409,28 @@ func loadConfig() (Config, error) {
 		}
 	}
 
+	// Parse accumulate results option
+	accumulateResultsStr := os.Getenv("ACCUMULATE_RESULTS")
+	accumulateResults := false
+	if accumulateResultsStr != "" {
+		if parsedAccumulateResults, err := strconv.ParseBool(accumulateResultsStr); err == nil {
+			accumulateResults = parsedAccumulateResults
+		}
+	}
+
 	cacheFileName = filepath.Join(outputPath, "analyzed-repos.txt")
 
 	return Config{
-		GitHubToken:  token,
-		Organization: org,
-		OutputFile:   filepath.Join(outputPath, outputFile),
-		Limit:        limit,
-		Offset:       offset,
-		DelayMs:      delayMs,
-		MaxRetries:   maxRetries,
-		ClearCache:   clearCache,
-		OutputPath:   outputPath,
+		GitHubToken:       token,
+		Organization:      org,
+		OutputFile:        filepath.Join(outputPath, outputFile),
+		Limit:             limit,
+		Offset:            offset,
+		DelayMs:           delayMs,
+		MaxRetries:        maxRetries,
+		ClearCache:        clearCache,
+		OutputPath:        outputPath,
+		AccumulateResults: accumulateResults,
 	}, nil
 }
 
@@ -475,7 +490,7 @@ func getRepositories(client GitHubClient, org string, limit, offset int) ([]Repo
 	return repos, nil
 }
 
-func analyzeRepositories(client GitHubClient, org string, repos []Repository, analyzedRepos map[string]bool, outputFile string) Result {
+func analyzeRepositories(client GitHubClient, org string, repos []Repository, analyzedRepos map[string]bool, outputFile string, accumulateResults bool, outputPath string) Result {
 	result := Result{
 		Organization: org,
 		TotalRepos:   len(repos),
@@ -506,9 +521,19 @@ func analyzeRepositories(client GitHubClient, org string, repos []Repository, an
 
 		// Save results immediately for this repository
 		if len(images) > 0 {
-			if err := appendResultToFile(org, repo.Name, images, outputFile); err != nil {
-				fmt.Printf("Warning: Could not save results for repository %s: %v\n", repo.Name, err)
+			if accumulateResults {
+				// Save only to the unified file when accumulate is enabled
+				unifiedFile := filepath.Join(outputPath, "docker-images-all.txt")
+				if err := appendResultToFile(org, repo.Name, images, unifiedFile); err != nil {
+					fmt.Printf("Warning: Could not save results to unified file for repository %s: %v\n", repo.Name, err)
+				}
+			} else {
+				// Save to specific output file (with offset/limit) when accumulate is disabled
+				if err := appendResultToFile(org, repo.Name, images, outputFile); err != nil {
+					fmt.Printf("Warning: Could not save results for repository %s: %v\n", repo.Name, err)
+				}
 			}
+
 			result.ReposWithDocker++
 			result.Images = append(result.Images, images...)
 		}
