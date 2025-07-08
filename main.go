@@ -316,13 +316,9 @@ func main() {
 	}
 
 	// Analyze repositories
-	result := analyzeRepositories(gh, config.Organization, repos, analyzedRepos)
+	result := analyzeRepositories(gh, config.Organization, repos, analyzedRepos, config.OutputFile)
 
-	// Save results
-	if err := saveResults(result, config.OutputFile); err != nil {
-		fmt.Printf("Error saving results: %v\n", err)
-		os.Exit(1)
-	}
+	// Results are saved immediately during analysis, no need to save again
 
 	// Update unique images file
 	if err := updateUniqueImages(result.Images, filepath.Join(config.OutputPath, "unique-images.txt")); err != nil {
@@ -479,7 +475,7 @@ func getRepositories(client GitHubClient, org string, limit, offset int) ([]Repo
 	return repos, nil
 }
 
-func analyzeRepositories(client GitHubClient, org string, repos []Repository, analyzedRepos map[string]bool) Result {
+func analyzeRepositories(client GitHubClient, org string, repos []Repository, analyzedRepos map[string]bool, outputFile string) Result {
 	result := Result{
 		Organization: org,
 		TotalRepos:   len(repos),
@@ -508,7 +504,11 @@ func analyzeRepositories(client GitHubClient, org string, repos []Repository, an
 		}
 		fmt.Printf("Analyzing repository: %s - Found %d images\n", repo.Name, len(images))
 
+		// Save results immediately for this repository
 		if len(images) > 0 {
+			if err := appendResultToFile(org, repo.Name, images, outputFile); err != nil {
+				fmt.Printf("Warning: Could not save results for repository %s: %v\n", repo.Name, err)
+			}
 			result.ReposWithDocker++
 			result.Images = append(result.Images, images...)
 		}
@@ -809,9 +809,10 @@ func findStageByName(name string, stages []DockerStage) DockerStage {
 
 func saveResults(result Result, outputFile string) error {
 	// Create text file with format: org/repo_name, branch, folder/file, image
-	file, err := os.Create(outputFile)
+	// Use append mode to avoid overwriting existing results
+	file, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		return fmt.Errorf("error creating file: %w", err)
+		return fmt.Errorf("error creating/opening file: %w", err)
 	}
 	defer file.Close()
 
@@ -829,6 +830,42 @@ func saveResults(result Result, outputFile string) error {
 		}
 
 		line := fmt.Sprintf("%s/%s, %s, %s/%s, %s\n", result.Organization, image.Repository, image.Branch, folder, filename, image.Image)
+		_, err := file.WriteString(line)
+		if err != nil {
+			return fmt.Errorf("error writing to file: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// appendResultToFile appends a single repository result to the output file
+func appendResultToFile(org, repoName string, images []DockerImage, outputFile string) error {
+	if len(images) == 0 {
+		return nil // No images to save
+	}
+
+	// Open file in append mode
+	file, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("error opening file for append: %w", err)
+	}
+	defer file.Close()
+
+	for _, image := range images {
+		// Extract folder and filename from the file path
+		filePath := image.File
+		folder := "."
+		filename := filePath
+
+		// If the file is not in the root, extract the folder
+		if strings.Contains(filePath, "/") {
+			lastSlash := strings.LastIndex(filePath, "/")
+			folder = filePath[:lastSlash]
+			filename = filePath[lastSlash+1:]
+		}
+
+		line := fmt.Sprintf("%s/%s, %s, %s/%s, %s\n", org, image.Repository, image.Branch, folder, filename, image.Image)
 		_, err := file.WriteString(line)
 		if err != nil {
 			return fmt.Errorf("error writing to file: %w", err)
